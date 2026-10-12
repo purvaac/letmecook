@@ -165,6 +165,69 @@ func shortageError(ctx context.Context, pool *pgxpool.Pool, items []LineItem) er
 	return &OutOfStockError{Items: short}
 }
 
+// nextStatus is the only allowed move from each stage. PICKED_UP is final.
+var nextStatus = map[models.Status]models.Status{
+	models.StatusNew:     models.StatusCooking,
+	models.StatusCooking: models.StatusReady,
+	models.StatusReady:   models.StatusPickedUp,
+}
+
+// UpdateStatus moves an order one stage forward. expectedVersion is the
+// version the caller last saw; if the order changed since then, it returns
+// ConflictError with the current order and changes nothing.
+func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, id int, next models.Status, expectedVersion int) (models.Order, error) {
+	current, err := GetOrder(ctx, pool, id)
+	if err != nil {
+		return models.Order{}, err
+	}
+	// A stale caller gets the latest order back instead of a confusing
+	// "invalid transition" for a move another screen already made.
+	if current.Version != expectedVersion {
+		return models.Order{}, &ConflictError{Current: current}
+	}
+	if nextStatus[current.Status] != next {
+		return models.Order{}, &InvalidTransitionError{From: current.Status, To: next}
+	}
+
+	// The column name comes from this switch only, never from the request.
+	var column string
+	switch next {
+	case models.StatusCooking:
+		column = "cooking_at"
+	case models.StatusReady:
+		column = "ready_at"
+	case models.StatusPickedUp:
+		column = "picked_up_at"
+	}
+
+	// Two kitchen screens can load the same order and click at the same
+	// moment. Both pass the checks above, but the WHERE clause re-checks
+	// status and version on the locked row, so only the first UPDATE matches;
+	// the second sees the bumped version, matches no row and becomes a conflict.
+	sql := fmt.Sprintf(
+		`UPDATE orders
+		 SET status = $1, version = version + 1, updated_at = now(), %s = now()
+		 WHERE id = $2 AND status = $3 AND version = $4
+		 RETURNING `+orderColumns, column)
+
+	updated := models.Order{Items: current.Items, TotalCents: current.TotalCents}
+	err = pool.QueryRow(ctx, sql, next, id, current.Status, expectedVersion).Scan(
+		&updated.ID, &updated.Status, &updated.Version, &updated.CreatedAt,
+		&updated.CookingAt, &updated.ReadyAt, &updated.PickedUpAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		latest, err := GetOrder(ctx, pool, id)
+		if err != nil {
+			return models.Order{}, err
+		}
+		return models.Order{}, &ConflictError{Current: latest}
+	}
+	if err != nil {
+		return models.Order{}, fmt.Errorf("update order %d status: %w", id, err)
+	}
+	return updated, nil
+}
+
 const orderColumns = `id, status, version, created_at, cooking_at, ready_at, picked_up_at`
 
 // GetOrder returns one order with its items, or ErrNotFound.

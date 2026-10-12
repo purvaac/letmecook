@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"letmecook/models"
 	"letmecook/orders"
 )
 
@@ -135,6 +136,61 @@ func (s *server) getOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, order)
+}
+
+type updateStatusRequest struct {
+	Status  models.Status `json:"status"`
+	Version int           `json:"version"`
+}
+
+func (s *server) updateStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "VALIDATION", "order id must be a positive number")
+		return
+	}
+
+	var req updateStatusRequest
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION", `body must be JSON like {"status":"COOKING","version":1}`)
+		return
+	}
+	switch req.Status {
+	case models.StatusNew, models.StatusCooking, models.StatusReady, models.StatusPickedUp:
+	default:
+		writeError(w, http.StatusBadRequest, "VALIDATION", "status must be NEW, COOKING, READY or PICKED_UP")
+		return
+	}
+	if req.Version < 1 {
+		writeError(w, http.StatusBadRequest, "VALIDATION", "version must be a positive number")
+		return
+	}
+
+	order, err := orders.UpdateStatus(r.Context(), s.pool, id, req.Status, req.Version)
+	var invalid *orders.InvalidTransitionError
+	var conflict *orders.ConflictError
+	switch {
+	case errors.As(err, &invalid):
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":   "INVALID_TRANSITION",
+			"message": fmt.Sprintf("cannot move an order from %s to %s", invalid.From, invalid.To),
+			"from":    invalid.From,
+			"to":      invalid.To,
+		})
+	case errors.As(err, &conflict):
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":   "CONFLICT",
+			"message": "this order was updated on another screen",
+			"order":   conflict.Current,
+		})
+	case errors.Is(err, orders.ErrNotFound):
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "order not found")
+	case err != nil:
+		internalError(w, "update status", err)
+	default:
+		writeJSON(w, http.StatusOK, order)
+	}
 }
 
 // internalError logs the real error and sends a generic 500 to the client.
