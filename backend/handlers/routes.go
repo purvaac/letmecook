@@ -10,11 +10,16 @@ import (
 
 // NewRouter registers all routes and wraps them in the CORS middleware.
 func NewRouter(pool *pgxpool.Pool, origins []string) http.Handler {
+	s := &server{pool: pool}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
+	mux.HandleFunc("GET /api/menu", s.getMenu)
+	mux.HandleFunc("GET /api/orders", s.listOrders)
+	mux.HandleFunc("POST /api/orders", s.placeOrder)
+	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 
 	return withCORS(mux, origins)
 }
