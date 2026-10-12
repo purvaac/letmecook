@@ -20,6 +20,7 @@ func NewRouter(pool *pgxpool.Pool, origins []string) http.Handler {
 	mux.HandleFunc("GET /api/orders", s.listOrders)
 	mux.HandleFunc("POST /api/orders", s.placeOrder)
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
+	mux.HandleFunc("PATCH /api/orders/{id}/status", s.updateStatus)
 
 	return withCORS(mux, origins)
 }
