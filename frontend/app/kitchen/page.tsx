@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import OrderCard from "@/components/OrderCard";
 import { getOrders, updateStatus } from "@/lib/api";
 import { onMessage, onOpen, subscribe, unsubscribe } from "@/lib/socket";
-import { useKitchenStore } from "@/lib/store";
+import { useDemoStore, useKitchenStore } from "@/lib/store";
 import type { Order, OrderStatus } from "@/lib/types";
 
 const PICKED_UP_SHOWN = 10;
@@ -16,7 +16,8 @@ const columns: { status: OrderStatus; title: string }[] = [
   { status: "PICKED_UP", title: "Picked up" },
 ];
 
-type Notice = { id: number; text: string };
+// epoch is the demo reset count when the notice was made (see useDemoStore).
+type Notice = { id: number; text: string; epoch: number };
 let nextNoticeId = 1;
 
 export default function KitchenPage() {
@@ -24,13 +25,16 @@ export default function KitchenPage() {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState("");
   const [notices, setNotices] = useState<Notice[]>([]);
+  const resets = useDemoStore((s) => s.resets);
+  const [dismissedReset, setDismissedReset] = useState(0);
   // One shared clock for every card's age, instead of one interval per card.
   // It starts at 0 because Date.now() is not allowed while Next prerenders;
   // load() sets it before any card is shown.
   const [now, setNow] = useState(0);
 
   function notify(text: string) {
-    setNotices((list) => [{ id: nextNoticeId++, text }, ...list].slice(0, 5));
+    const epoch = useDemoStore.getState().resets;
+    setNotices((list) => [{ id: nextNoticeId++, text, epoch }, ...list].slice(0, 5));
   }
 
   useEffect(() => {
@@ -58,16 +62,11 @@ export default function KitchenPage() {
     const upsert = (order: Order) => useKitchenStore.getState().upsert(order);
     const offCreated = onMessage<Order>("order:created", upsert);
     const offUpdated = onMessage<Order>("order:updated", upsert);
-    // Someone pressed Reset demo: notices about old orders no longer apply.
-    const offReset = onMessage("demo:reset", () => {
-      setNotices([{ id: nextNoticeId++, text: "The demo was reset: all orders were cleared." }]);
-    });
 
     return () => {
       offOpen();
       offCreated();
       offUpdated();
-      offReset();
       unsubscribe("kitchen");
     };
   }, []);
@@ -97,13 +96,19 @@ export default function KitchenPage() {
   const byAge = (a: Order, b: Order) => time(a.createdAt) - time(b.createdAt) || a.id - b.id;
   const newestPickup = (a: Order, b: Order) => time(b.pickedUpAt) - time(a.pickedUpAt) || b.id - a.id;
 
+  // Only notices from after the last reset, plus one note about the reset.
+  const shownNotices: Notice[] = notices.filter((n) => n.epoch === resets);
+  if (resets > 0 && dismissedReset !== resets) {
+    shownNotices.unshift({ id: -resets, text: "The demo was reset: all orders were cleared.", epoch: resets });
+  }
+
   return (
     <div>
       <h1 className="mb-4 text-2xl font-extrabold sm:text-3xl">Kitchen</h1>
 
-      {notices.length > 0 && (
+      {shownNotices.length > 0 && (
         <ul className="mb-4 flex flex-col gap-2" aria-live="polite">
-          {notices.map((n) => (
+          {shownNotices.map((n) => (
             <li
               key={n.id}
               className="flex items-start justify-between gap-2 rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm"
@@ -112,7 +117,9 @@ export default function KitchenPage() {
               <button
                 type="button"
                 aria-label="Dismiss"
-                onClick={() => setNotices((list) => list.filter((x) => x.id !== n.id))}
+                onClick={() =>
+                  n.id < 0 ? setDismissedReset(resets) : setNotices((list) => list.filter((x) => x.id !== n.id))
+                }
                 className="-my-2 -mr-1 flex size-10 shrink-0 items-center justify-center rounded-md text-muted hover:text-ink"
               >
                 x
