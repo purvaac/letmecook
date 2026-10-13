@@ -247,7 +247,7 @@ func (s *server) resetDemo(w http.ResponseWriter, r *http.Request) {
 
 	// The reset has committed. Screens ignore stock going up from live
 	// messages, so instead of sending one we make every screen re-fetch.
-	s.hub.DisconnectAll()
+	s.hub.DisconnectAll("demo:reset")
 	log.Printf("demo reset: stock restored, orders cleared, all clients disconnected")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

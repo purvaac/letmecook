@@ -101,10 +101,18 @@ func (h *Hub) RemoveClient(c *Client) {
 	h.removeLocked(c)
 }
 
-// DisconnectAll drops every subscribed client, the same way a slow client is
-// dropped: its WritePump closes the socket with "reconnect and re-fetch", so
-// every screen reconnects and reloads its state over HTTP.
-func (h *Hub) DisconnectAll() {
+// DisconnectAll sends every subscribed client one last {type: lastType}
+// message, then drops it the same way a slow client is dropped: WritePump
+// still writes what is queued, then closes the socket with "reconnect and
+// re-fetch", so every screen reconnects and reloads its state over HTTP.
+// The last message tells the screen why (for example "demo:reset").
+func (h *Hub) DisconnectAll(lastType string) {
+	msg, err := json.Marshal(map[string]any{"type": lastType, "payload": nil})
+	if err != nil {
+		log.Printf("disconnect all: marshal: %v", err)
+		return
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -115,6 +123,10 @@ func (h *Hub) DisconnectAll() {
 		}
 	}
 	for c := range all {
+		select {
+		case c.send <- msg:
+		default: // buffer full: it still gets disconnected and re-fetches
+		}
 		h.removeLocked(c)
 	}
 }

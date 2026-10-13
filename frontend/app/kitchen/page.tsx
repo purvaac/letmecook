@@ -58,11 +58,16 @@ export default function KitchenPage() {
     const upsert = (order: Order) => useKitchenStore.getState().upsert(order);
     const offCreated = onMessage<Order>("order:created", upsert);
     const offUpdated = onMessage<Order>("order:updated", upsert);
+    // Someone pressed Reset demo: notices about old orders no longer apply.
+    const offReset = onMessage("demo:reset", () => {
+      setNotices([{ id: nextNoticeId++, text: "The demo was reset: all orders were cleared." }]);
+    });
 
     return () => {
       offOpen();
       offCreated();
       offUpdated();
+      offReset();
       unsubscribe("kitchen");
     };
   }, []);
