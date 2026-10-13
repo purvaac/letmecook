@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"letmecook/db"
 	"letmecook/models"
 	"letmecook/orders"
 	"letmecook/realtime"
@@ -19,10 +22,17 @@ import (
 
 const maxQuantity = 10
 
+// resetCooldown stops the demo reset button from being spammed.
+const resetCooldown = 15 * time.Second
+
 type server struct {
 	pool      *pgxpool.Pool
 	hub       *realtime.Hub
 	wsOrigins []string // host patterns for websocket.AcceptOptions
+	demoReset bool
+
+	resetMu   sync.Mutex
+	lastReset time.Time
 }
 
 func (s *server) getMenu(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +211,39 @@ func (s *server) updateStatus(w http.ResponseWriter, r *http.Request) {
 		s.hub.Broadcast(realtime.OrderRoom(order.ID), "order:updated", order)
 		writeJSON(w, http.StatusOK, order)
 	}
+}
+
+// resetDemo restocks the menu and deletes all orders, then drops every
+// WebSocket client so all screens reconnect and reload. It only exists on the
+// public demo (DEMO_RESET=true); everywhere else it is a 404.
+func (s *server) resetDemo(w http.ResponseWriter, r *http.Request) {
+	if !s.demoReset {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "not found")
+		return
+	}
+
+	s.resetMu.Lock()
+	if time.Since(s.lastReset) < resetCooldown {
+		s.resetMu.Unlock()
+		writeError(w, http.StatusTooManyRequests, "TOO_SOON", "The demo was just reset, try again in a few seconds.")
+		return
+	}
+	s.lastReset = time.Now()
+	s.resetMu.Unlock()
+
+	if err := db.RestockDemo(r.Context(), s.pool); err != nil {
+		s.resetMu.Lock()
+		s.lastReset = time.Time{}
+		s.resetMu.Unlock()
+		internalError(w, "reset demo", err)
+		return
+	}
+
+	// The reset has committed. Screens ignore stock going up from live
+	// messages, so instead of sending one we make every screen re-fetch.
+	s.hub.DisconnectAll()
+	log.Printf("demo reset: stock restored, orders cleared, all clients disconnected")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // wsMessage is what clients send over the socket, for example

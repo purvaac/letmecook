@@ -54,3 +54,12 @@ export function getOrders() {
 export function updateStatus(id: number, status: OrderStatus, version: number) {
   return request<Order>(`/api/orders/${id}/status`, "PATCH", { status, version });
 }
+
+export function getHealth() {
+  return request<{ ok: boolean; demoReset?: boolean }>("/api/health");
+}
+
+// Only works when the backend runs with DEMO_RESET=true (the public demo).
+export function resetDemo() {
+  return request<{ ok: boolean }>("/api/demo/reset", "POST");
+}
