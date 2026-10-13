@@ -15,7 +15,7 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
   return (
     <article className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-bold leading-snug">{item.name}</h3>
+        <h3 className="text-base font-bold leading-snug">{item.name}</h3>
         {soldOut ? (
           <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger">Sold out</span>
         ) : (
@@ -31,7 +31,7 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
             type="button"
             onClick={() => add(item.id)}
             disabled={!canAdd}
-            className="min-h-10 rounded-md bg-brand px-4 text-sm font-semibold text-ink hover:brightness-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:hover:brightness-100"
+            className="btn-primary min-h-10 px-5 text-sm"
           >
             {soldOut ? "Sold out" : "Add"}
           </button>

@@ -217,7 +217,7 @@ export default function CustomerPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <section>
-        <h1 className="mb-4 text-2xl font-bold sm:text-3xl">Menu</h1>
+        <h1 className="mb-4 text-2xl font-extrabold sm:text-3xl">Menu</h1>
 
         {loadState === "loading" && (
           <p className="rounded-lg border border-line bg-card p-4 text-sm text-muted">

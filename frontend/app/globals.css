@@ -13,16 +13,90 @@
   --color-warn: #d97706;
   --color-danger: #dc2626;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  /* Neon green glow around the edge of the current step of an order. The
+     resting glow is also set on the element, so it shows with reduced motion. */
+  --animate-glow: glow 2.4s ease-in-out infinite;
+  @keyframes glow {
+    0%,
+    100% {
+      box-shadow: 0 0 10px 3px rgb(57 255 136 / 0.55);
+    }
+    50% {
+      box-shadow: 0 0 14px 5px rgb(57 255 136 / 0.75);
+    }
+  }
 }
 
 
+/* The green action button (Add, Place order, kitchen actions): a slight
+   top-to-bottom gradient, a light top edge and a soft green shadow so it
+   reads as raised; it lifts on hover and presses in when clicked. */
+@utility btn-primary {
+  border-radius: var(--radius-lg);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-brand), white 14%),
+    var(--color-brand)
+  );
+  color: var(--color-ink);
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    inset 0 -2px 0 rgb(0 0 0 / 0.1),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 4px 12px -3px color-mix(in srgb, var(--color-brand-dark), transparent 50%);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    filter 120ms ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 0 -2px 0 rgb(0 0 0 / 0.1),
+      0 2px 4px rgb(0 0 0 / 0.12),
+      0 8px 18px -4px color-mix(in srgb, var(--color-brand-dark), transparent 40%);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+    filter: brightness(0.97);
+    box-shadow:
+      inset 0 2px 4px rgb(0 0 0 / 0.18),
+      0 1px 1px rgb(0 0 0 / 0.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-brand-dark);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    background-image: none;
+    background-color: var(--color-line);
+    color: var(--color-muted);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+}
+
 @layer base {
-  h1,
+  /* Tailwind 4 leaves buttons with the default arrow cursor. */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* One typeface everywhere; headings get weight and tighter spacing. */
+  h1 {
+    letter-spacing: -0.025em;
+  }
+
   h2,
   h3 {
-    font-family: var(--font-display);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
   }
 }
