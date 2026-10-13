@@ -44,6 +44,7 @@ func (c *Client) WritePump(ctx context.Context) {
 		err := c.conn.Write(writeCtx, websocket.MessageText, msg)
 		cancel()
 		if err != nil {
+			log.Printf("websocket write failed, closing client: %v", err)
 			// Closing the socket also ends the read loop, which removes us from the hub.
 			c.conn.CloseNow()
 			return
