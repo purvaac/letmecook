@@ -9,16 +9,20 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/coder/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"letmecook/models"
 	"letmecook/orders"
+	"letmecook/realtime"
 )
 
 const maxQuantity = 10
 
 type server struct {
-	pool *pgxpool.Pool
+	pool      *pgxpool.Pool
+	hub       *realtime.Hub
+	wsOrigins []string // host patterns for websocket.AcceptOptions
 }
 
 func (s *server) getMenu(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +56,7 @@ func (s *server) placeOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, _, err := orders.PlaceOrder(r.Context(), s.pool, items)
+	order, changes, err := orders.PlaceOrder(r.Context(), s.pool, items)
 	var oos *orders.OutOfStockError
 	switch {
 	case errors.As(err, &oos):
@@ -66,6 +70,9 @@ func (s *server) placeOrder(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		internalError(w, "place order", err)
 	default:
+		// PlaceOrder has committed, so it is now safe to tell everyone.
+		s.hub.Broadcast("menu", "stock:updated", changes)
+		s.hub.Broadcast("kitchen", "order:created", order)
 		writeJSON(w, http.StatusCreated, order)
 	}
 }
@@ -189,7 +196,63 @@ func (s *server) updateStatus(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		internalError(w, "update status", err)
 	default:
+		// UpdateStatus has committed, so it is now safe to tell everyone.
+		s.hub.Broadcast("kitchen", "order:updated", order)
+		s.hub.Broadcast(realtime.OrderRoom(order.ID), "order:updated", order)
 		writeJSON(w, http.StatusOK, order)
+	}
+}
+
+// wsMessage is what clients send over the socket, for example
+// {"type":"subscribe","room":"order","orderId":7}.
+type wsMessage struct {
+	Type    string `json:"type"`
+	Room    string `json:"room"`
+	OrderID int    `json:"orderId"`
+}
+
+func (s *server) serveWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: s.wsOrigins})
+	if err != nil {
+		// Accept has already written an HTTP error response.
+		log.Printf("websocket accept: %v", err)
+		return
+	}
+	ctx := r.Context()
+
+	c := realtime.NewClient(conn)
+	go c.WritePump(ctx)
+	defer func() {
+		s.hub.RemoveClient(c)
+		conn.CloseNow()
+	}()
+
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			return // client closed the socket or the connection broke
+		}
+		var msg wsMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			continue
+		}
+
+		var room string
+		switch {
+		case msg.Room == "menu" || msg.Room == "kitchen":
+			room = msg.Room
+		case msg.Room == "order" && msg.OrderID > 0:
+			room = realtime.OrderRoom(msg.OrderID)
+		default:
+			continue
+		}
+
+		switch msg.Type {
+		case "subscribe":
+			s.hub.Subscribe(c, room)
+		case "unsubscribe":
+			s.hub.Unsubscribe(c, room)
+		}
 	}
 }
 

@@ -4,13 +4,17 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"letmecook/realtime"
 )
 
 // NewRouter registers all routes and wraps them in the CORS middleware.
-func NewRouter(pool *pgxpool.Pool, origins []string) http.Handler {
-	s := &server{pool: pool}
+// origins are full URLs like http://localhost:3000.
+func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, origins []string) http.Handler {
+	s := &server{pool: pool, hub: hub, wsOrigins: originHosts(origins)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -21,8 +25,24 @@ func NewRouter(pool *pgxpool.Pool, origins []string) http.Handler {
 	mux.HandleFunc("POST /api/orders", s.placeOrder)
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 	mux.HandleFunc("PATCH /api/orders/{id}/status", s.updateStatus)
+	mux.HandleFunc("GET /ws", s.serveWS)
 
 	return withCORS(mux, origins)
+}
+
+// originHosts turns "http://localhost:3000" into "localhost:3000", because
+// websocket.AcceptOptions.OriginPatterns matches against the host only.
+func originHosts(origins []string) []string {
+	hosts := make([]string, 0, len(origins))
+	for _, o := range origins {
+		u, err := url.Parse(o)
+		if err != nil || u.Host == "" {
+			log.Printf("ignoring invalid CORS origin %q", o)
+			continue
+		}
+		hosts = append(hosts, u.Host)
+	}
+	return hosts
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
