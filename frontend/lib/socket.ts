@@ -17,6 +17,9 @@ type OpenHandler = () => unknown;
 
 const WS_URL = API_URL.replace(/^http/, "ws") + "/ws";
 const RETRY_MS = 2000;
+// Close code 1013 (Try Again Later) means the server dropped us on purpose
+// (demo reset, or we were too slow) and is still up, so reconnect right away.
+const SERVER_ASKED_MS = 250;
 
 let ws: WebSocket | null = null;
 let status: SocketStatus = "reconnecting";
@@ -58,10 +61,10 @@ function connect() {
   };
 
   // onerror is always followed by onclose, so retrying here covers both.
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     ws = null;
     setStatus("reconnecting");
-    setTimeout(connect, RETRY_MS);
+    setTimeout(connect, event.code === 1013 ? SERVER_ASKED_MS : RETRY_MS);
   };
 }
 

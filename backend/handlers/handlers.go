@@ -23,7 +23,7 @@ import (
 const maxQuantity = 10
 
 // resetCooldown stops the demo reset button from being spammed.
-const resetCooldown = 15 * time.Second
+const resetCooldown = 5 * time.Second
 
 type server struct {
 	pool      *pgxpool.Pool
@@ -223,9 +223,15 @@ func (s *server) resetDemo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.resetMu.Lock()
-	if time.Since(s.lastReset) < resetCooldown {
+	if wait := resetCooldown - time.Since(s.lastReset); wait > 0 {
 		s.resetMu.Unlock()
-		writeError(w, http.StatusTooManyRequests, "TOO_SOON", "The demo was just reset, try again in a few seconds.")
+		seconds := int(wait.Seconds()) + 1
+		w.Header().Set("Retry-After", strconv.Itoa(seconds))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":             "TOO_SOON",
+			"message":           "The demo was just reset, try again in a few seconds.",
+			"retryAfterSeconds": seconds,
+		})
 		return
 	}
 	s.lastReset = time.Now()
