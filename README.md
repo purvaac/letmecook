@@ -1,4 +1,4 @@
-letmecook - Live Kitchen OperationsE
+# letmecook - Live Kitchen Operations
 
 This is my submission for the Full Stack Developer Intern assignment. It is a small food ordering system with two screens:
 
@@ -270,18 +270,17 @@ Things that tripped me up:
 - The frontend loaded but couldn't talk to the backend until `CORS_ORIGINS` was the frontend's real https address. Before that the API had no CORS header and the WebSocket handshake got a 403.
 - The new `production` branch was empty at first ("relation menu_items does not exist"), so I had to seed it once with `go run . -seed` pointed at that branch.
 
-### Demo reset button
+### Demo reset buttonReset demo button
 
-Stock only goes down, so after the first person tries the "last unit" case, the Paneer Tikka Wrap is sold out for everyone after them. To keep the live demo usable I added a **Reset demo** button in the header. It is only there on the deployed version:
+Stock only goes down, so after one “last unit” test the item stays sold out for everyone. To keep the live demo usable, the deployed version has a Reset demo button in the header.
 
-- It only exists when the backend runs with `DEMO_RESET=true`. Otherwise `POST /api/demo/reset` is a 404 and the button is hidden (the frontend asks `/api/health` whether it is on).
-- One click puts every item back to its seed stock and deletes all orders, in one transaction. It updates the rows in the same id order that `PlaceOrder` locks them in, so a reset and an order can't deadlock.
-- Order ids keep counting up after a reset. Customer tabs remember their order ids, so if ids restarted at 1, a tab could show someone else's new order #1 as its own.
-- After the reset commits, the server closes every WebSocket (code 1013). Every open screen reconnects right away and reloads everything over HTTP. I did it this way on purpose: the menu ignores stock going *up* in live messages (see above), so a normal stock message wouldn't work, and the reconnect path already exists and is tested.
-- There is a 5 second cooldown so it can't be spammed. While it runs, the button is greyed out and counts down ("Wait 4s").
-
-My first version needed two clicks (a confirm step) and had a 15 second cooldown. Testing it on the live site, it felt like it "sometimes worked": a single click did nothing, the cooldown refusal was easy to miss, and the screens only updated 2 seconds after "Reset done". So I changed it to one click, a visible countdown, and the faster reconnect.
-
-This is the one place where stock changes outside of placing an order. It's a demo tool, it's off by default, and the ordering logic itself is not touched by it.
+Off by default. It only exists when the backend runs with DEMO_RESET=true; otherwise POST /api/demo/reset returns 404 and the button is hidden.
+One transaction. It restores every item’s seed stock and deletes all orders, locking rows in the same id order as PlaceOrder, so it can’t deadlock with an order.
+Order ids keep counting up. Customer tabs remember their order ids, so restarting at 1 could show someone else’s order as theirs.
+Screens refresh by reconnecting. After the commit, the server closes every WebSocket (code 1013), and each screen reconnects and reloads over HTTP. A normal stock message wouldn’t work, because the menu ignores live stock increases.
+5-second cooldown, shown as a countdown on the button.
 
 ---
+
+
+Thanks for taking the time to look at this. If you have questions about a decision, I'm happy to walk through it.
