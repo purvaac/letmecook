@@ -327,9 +327,3 @@ frontend/
 | PATCH | `/api/orders/{id}/status` | `{"status":"COOKING","version":1}` -> 200, 409 `CONFLICT` (with the current order) or 400 `INVALID_TRANSITION` |
 | POST | `/api/demo/reset` | only when `DEMO_RESET=true`: restock and clear orders -> 200, 429 `TOO_SOON` (with `retryAfterSeconds`) during the 5 s cooldown, 404 when switched off |
 | GET | `/ws` | WebSocket |
-
-## Things I would do with more time
-
-- A frontend test for the reconnect logic (I tested it by hand).
-- A test that actually fills up a slow client's buffer. The disconnect part of that path is now covered by `TestDemoReset` (the reset drops clients the same way), but the "buffer is full" trigger itself is only tested indirectly.
-- Restocking from the kitchen screen. Then the "keep the lower stock" rule on the frontend would need a version number on stock too.
