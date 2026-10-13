@@ -1,4 +1,4 @@
-W# letmecook - Live Kitchen OperationsE
+letmecook - Live Kitchen OperationsE
 
 This is my submission for the Full Stack Developer Intern assignment. It is a small food ordering system with two screens:
 
@@ -285,40 +285,3 @@ My first version needed two clicks (a confirm step) and had a 15 second cooldown
 This is the one place where stock changes outside of placing an order. It's a demo tool, it's off by default, and the ordering logic itself is not touched by it.
 
 ---
-
-## Project structure
-
-```
-backend/
-  main.go                  config, -seed flag, server start / graceful shutdown
-  db/db.go, schema.sql     connection pool, tables, seed data
-  models/models.go         MenuItem, Order, OrderItem
-  orders/orders.go         PlaceOrder (stock), UpdateStatus (versions), queries
-  orders/errors.go         OutOfStockError, ConflictError, InvalidTransitionError
-  realtime/hub.go          WebSocket clients, rooms, non-blocking broadcast
-  handlers/routes.go       routes, CORS, JSON helpers
-  handlers/handlers.go     HTTP + WebSocket handlers
-  handlers/handlers_test.go  concurrency tests
-frontend/
-  app/layout.tsx           header
-  app/page.tsx             customer screen (menu, cart, your orders)
-  app/kitchen/page.tsx     kitchen board
-  components/              MenuItemCard, Cart, StatusTracker, OrderCard
-  lib/api.ts               REST calls
-  lib/socket.ts            shared WebSocket, reconnect, re-subscribe
-  lib/store.ts             Zustand stores (menu, cart, kitchen)
-  lib/types.ts             types matching the Go JSON
-```
-
-## API
-
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/api/health` | `{"demoReset":false,"ok":true}` |
-| GET | `/api/menu` | all menu items with current stock |
-| POST | `/api/orders` | `{"items":[{"menuItemId":2,"quantity":1}]}` -> 201 order, or 409 `OUT_OF_STOCK` with the short items |
-| GET | `/api/orders` | all orders (for the kitchen) |
-| GET | `/api/orders/{id}` | one order |
-| PATCH | `/api/orders/{id}/status` | `{"status":"COOKING","version":1}` -> 200, 409 `CONFLICT` (with the current order) or 400 `INVALID_TRANSITION` |
-| POST | `/api/demo/reset` | only when `DEMO_RESET=true`: restock and clear orders -> 200, 429 `TOO_SOON` (with `retryAfterSeconds`) during the 5 s cooldown, 404 when switched off |
-| GET | `/ws` | WebSocket |
