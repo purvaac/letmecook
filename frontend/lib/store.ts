@@ -27,6 +27,9 @@ export const useMenuStore = create<MenuState>()((set) => ({
     }),
 }));
 
+// The backend rejects more than 10 of one item in an order.
+export const MAX_PER_ITEM = 10;
+
 export type CartLine = { menuItemId: number; quantity: number };
 export type CappedLine = { menuItemId: number; from: number; to: number };
 
