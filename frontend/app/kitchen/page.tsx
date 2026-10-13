@@ -94,7 +94,7 @@ export default function KitchenPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold sm:text-3xl">Kitchen</h1>
+      <h1 className="mb-4 text-2xl font-extrabold sm:text-3xl">Kitchen</h1>
 
       {notices.length > 0 && (
         <ul className="mb-4 flex flex-col gap-2" aria-live="polite">

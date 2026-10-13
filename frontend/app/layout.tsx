@@ -1,12 +1,11 @@
 "use client";
 
-import { Geist, Playfair_Display } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import "./globals.css";
 
-const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const playfair = Playfair_Display({ variable: "--font-playfair", subsets: ["latin"] });
+const jakarta = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin"] });
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const active = usePathname() === href;
@@ -24,7 +23,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} ${playfair.variable} antialiased`}>
+    <html lang="en" className={`${jakarta.variable} antialiased`}>
       <body className="min-h-screen bg-paper font-sans text-ink">
         <title>letmecook</title>
         <header className="border-b border-line bg-paper">

@@ -89,7 +89,7 @@ export default function OrderCard({ order, now, onAdvance }: Props) {
           type="button"
           onClick={advance}
           disabled={busy}
-          className="min-h-10 w-full rounded-md bg-brand text-sm font-semibold text-ink hover:brightness-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:hover:brightness-100"
+          className="btn-primary min-h-10 w-full text-sm"
         >
           {busy ? "Saving..." : step.label}
         </button>

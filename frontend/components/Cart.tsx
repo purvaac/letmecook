@@ -77,7 +77,7 @@ export default function Cart({ submitting, onPlaceOrder }: { submitting: boolean
         type="button"
         onClick={onPlaceOrder}
         disabled={lines.length === 0 || submitting}
-        className="mt-4 min-h-11 w-full rounded-md bg-brand font-semibold text-ink hover:brightness-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:hover:brightness-100"
+        className="btn-primary mt-4 min-h-11 w-full"
       >
         {submitting ? "Placing order..." : "Place order"}
       </button>
