@@ -328,6 +328,10 @@ func TestDemoReset(t *testing.T) {
 	if code := send(t, http.MethodPost, srv.URL+"/api/demo/reset", ""); code != 429 {
 		t.Errorf("second reset straight away: got %d, want 429", code)
 	}
+	time.Sleep(resetCooldown)
+	if code := send(t, http.MethodPost, srv.URL+"/api/demo/reset", ""); code != 200 {
+		t.Errorf("reset after the cooldown: got %d, want 200", code)
+	}
 
 	if code := send(t, http.MethodPost, srv.URL+"/api/orders", orderBody(wrap.ID)); code != 201 {
 		t.Fatalf("order after reset: got %d", code)

@@ -43,7 +43,7 @@ export type ShortItem = {
 };
 
 // Error body sent by the backend. items comes with OUT_OF_STOCK, order with
-// CONFLICT, from and to with INVALID_TRANSITION.
+// CONFLICT, from and to with INVALID_TRANSITION, retryAfterSeconds with TOO_SOON.
 export type ApiError = {
   error: string;
   message: string;
@@ -51,4 +51,5 @@ export type ApiError = {
   order?: Order;
   from?: OrderStatus;
   to?: OrderStatus;
+  retryAfterSeconds?: number;
 };

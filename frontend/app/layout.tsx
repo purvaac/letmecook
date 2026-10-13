@@ -24,79 +24,93 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
-type ResetState = "idle" | "confirm" | "busy" | "done" | "error";
+// Matches the backend's cooldown between two resets.
+const RESET_COOLDOWN_S = 5;
 
-// Only shown when the backend says demo reset is on (the public demo). The
-// first click asks for confirmation, the second one resets. The server then
-// drops every socket, so all open screens reconnect and reload by themselves.
+// Only shown when the backend says demo reset is on (the public demo). One
+// click resets; the server then drops every socket and all open screens
+// reconnect and reload by themselves. Between resets the button is disabled
+// and counts down, so it never looks like a click was ignored.
 function ResetDemoButton() {
   const [enabled, setEnabled] = useState(false);
-  const [state, setState] = useState<ResetState>("idle");
-  const [message, setMessage] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [doneUntil, setDoneUntil] = useState(0);
+  const [waitUntil, setWaitUntil] = useState(0);
+  const [now, setNow] = useState(0);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     getHealth().then((res) => setEnabled(res.ok && res.data.demoReset === true));
-    return () => clearTimeout(timer.current);
   }, []);
 
-  function backToIdleIn(ms: number) {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState("idle"), ms);
-  }
+  // Tick only while there is a countdown or a "done" message to clear.
+  const ticking = waitUntil > now || doneUntil > now || failed;
+  useEffect(() => {
+    if (!ticking) return;
+    const tick = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      setFailed((f) => f && t < waitUntil);
+    }, 250);
+    return () => clearInterval(tick);
+  }, [ticking, waitUntil]);
 
   async function onClick() {
-    if (state === "idle" || state === "done" || state === "error") {
-      setState("confirm");
-      backToIdleIn(4000);
-      return;
-    }
-    if (state !== "confirm") return;
+    // A ref, not state: a second click before React re-renders must not
+    // send a second request.
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setFailed(false);
 
-    clearTimeout(timer.current);
-    setState("busy");
     const res = await resetDemo();
+    const t = Date.now();
     if (res.ok) {
       useCartStore.getState().clear();
-      setState("done");
-      backToIdleIn(2500);
+      setDoneUntil(t + 1500);
+      setWaitUntil(t + RESET_COOLDOWN_S * 1000);
+    } else if (res.status === 429) {
+      setWaitUntil(t + (res.error.retryAfterSeconds ?? RESET_COOLDOWN_S) * 1000);
     } else {
-      setMessage(res.status === 429 ? "Just reset, try again soon" : "Reset failed");
-      setState("error");
-      backToIdleIn(3500);
+      setFailed(true);
+      setWaitUntil(t + 3000);
     }
+    setNow(t);
+    setBusy(false);
+    inFlight.current = false;
   }
 
   if (!enabled) return null;
 
-  const look: Record<ResetState, string> = {
-    idle: "border-line text-muted hover:border-muted hover:text-ink",
-    confirm: "border-danger text-danger",
-    busy: "border-line text-muted",
-    done: "border-brand text-brand-dark",
-    error: "border-danger text-danger",
-  };
-  const label: Record<ResetState, [string, string]> = {
-    idle: ["Reset demo", ""],
-    confirm: ["Reset stock & orders?", "Sure?"],
-    busy: ["Resetting...", "..."],
-    done: ["Reset done", "Done"],
-    error: [message, "Error"],
-  };
-  const [long, short] = label[state];
+  const secondsLeft = Math.max(0, Math.ceil((waitUntil - now) / 1000));
+  let label = "Reset demo";
+  let tone = "border-line text-muted hover:border-muted hover:text-ink";
+  if (busy) {
+    label = "Resetting...";
+  } else if (failed) {
+    label = "Reset failed";
+    tone = "border-danger text-danger";
+  } else if (doneUntil > now) {
+    label = "Reset done";
+    tone = "border-brand text-brand-dark";
+  } else if (secondsLeft > 0) {
+    label = `Wait ${secondsLeft}s`;
+  }
+  const disabled = busy || (!failed && secondsLeft > 0);
 
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={state === "busy"}
+      disabled={disabled}
       title="Restock the menu and delete all orders, for everyone"
-      aria-label={long}
-      className={`ml-auto flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2.5 text-sm transition-colors sm:px-3 ${look[state]}`}
+      aria-label={label}
+      className={`ml-auto flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border bg-card px-2.5 text-sm transition-colors disabled:cursor-not-allowed sm:w-36 sm:px-3 ${tone}`}
     >
       <svg
         viewBox="0 0 24 24"
-        className={`size-4 ${state === "busy" ? "animate-spin" : ""}`}
+        className={`size-4 shrink-0 ${busy ? "animate-spin" : ""}`}
         fill="none"
         stroke="currentColor"
         strokeWidth={2}
@@ -107,8 +121,7 @@ function ResetDemoButton() {
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
         <path d="M3 3v5h5" />
       </svg>
-      <span className="hidden sm:inline">{long}</span>
-      {short && <span className="sm:hidden">{short}</span>}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
