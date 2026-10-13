@@ -319,7 +319,11 @@ func TestDemoReset(t *testing.T) {
 		t.Errorf("orders after reset = %d, want 0", got)
 	}
 
-	// The screen is told to reconnect and re-fetch.
+	// The screen is told a reset happened, then to reconnect and re-fetch.
+	_, data, err := conn.Read(readCtx)
+	if err != nil || !strings.Contains(string(data), `"type":"demo:reset"`) {
+		t.Errorf("first message after reset: got %q (err %v), want a demo:reset message", data, err)
+	}
 	_, _, err = conn.Read(readCtx)
 	if status := websocket.CloseStatus(err); status != websocket.StatusTryAgainLater {
 		t.Errorf("socket after reset: got %v (status %d), want close status %d", err, status, websocket.StatusTryAgainLater)

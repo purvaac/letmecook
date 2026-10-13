@@ -32,6 +32,8 @@ const noticeStyles: Record<Notice["tone"], string> = {
 
 let nextNoticeId = 1;
 
+const RESET_NOTICE = "The demo was reset: stock is back and all orders were cleared.";
+
 function readOrderIds(): number[] {
   try {
     const ids: unknown = JSON.parse(sessionStorage.getItem(ORDERS_KEY) ?? "[]");
@@ -141,6 +143,16 @@ export default function CustomerPage() {
     subscribe("menu");
     const offOpen = onOpen(load);
     const offOpenOrders = onOpen(loadOrders);
+    // Someone pressed Reset demo: every order is gone and old notices (placed,
+    // sold out) no longer apply. Clear them here instead of relying on each
+    // saved order 404ing after the reconnect that follows.
+    const offReset = onMessage("demo:reset", () => {
+      setNotices([{ id: nextNoticeId++, tone: "info", text: RESET_NOTICE }]);
+      followed.current.forEach((id) => unsubscribe("order", id));
+      followed.current.clear();
+      writeOrderIds([]);
+      setMyOrders({});
+    });
     const offOrder = onMessage<Order>("order:updated", (order) => {
       if (followed.current.has(order.id)) keepNewer(order);
     });
@@ -157,6 +169,7 @@ export default function CustomerPage() {
       offOpenOrders();
       offStock();
       offOrder();
+      offReset();
       unsubscribe("menu");
       following.forEach((id) => unsubscribe("order", id));
       following.clear();
