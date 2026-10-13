@@ -18,6 +18,7 @@ import (
 
 	"letmecook/db"
 	"letmecook/handlers"
+	"letmecook/realtime"
 )
 
 func main() {
@@ -59,7 +60,7 @@ func run(seed bool) error {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           handlers.NewRouter(pool, origins),
+		Handler:           handlers.NewRouter(pool, realtime.NewHub(), origins),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
