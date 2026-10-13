@@ -1,4 +1,4 @@
-# letmecook - Live Kitchen Operations
+W# letmecook - Live Kitchen OperationsE
 
 This is my submission for the Full Stack Developer Intern assignment. It is a small food ordering system with two screens:
 
@@ -139,11 +139,6 @@ Why this is safe when two people order the last unit at the same moment:
 - No rows means "not enough stock". I roll back the whole transaction, so nothing from that order is kept (no half orders). Then I return a **409 OUT_OF_STOCK** saying which item was short and how many are left.
 - The table also has `CHECK (stock >= 0)` as a backstop, so even a bug in my code could not store negative stock.
 
-Two other details:
-
-- **Sorted locking.** If cart A has [Dosa, Biryani] and cart B has [Biryani, Dosa], they could lock the rows in opposite orders and deadlock. So I sort the items by id before updating, which means everyone locks rows in the same order.
-- **Nothing is checked first and then written later.** I never do "SELECT stock, then UPDATE if enough" in two steps, because another order could slip in between. The check and the write are the same statement.
-
 ### Kitchen screens agreeing with each other
 
 Every order has a `version` number, which goes up by one on every status change. To move an order, a kitchen screen sends the status it wants **and** the version it is looking at:
@@ -175,9 +170,9 @@ Some rules I stuck to:
 
 On the frontend, all of this lives in `frontend/lib/socket.ts` (one shared WebSocket per tab) and `frontend/lib/store.ts` (Zustand stores):
 
-- If the socket closes, it retries every 2 seconds. If the server closed it on purpose (close code 1013, "try again later", which the server sends when it drops a slow client or after a demo reset), it reconnects after 250 ms instead, because the server is fine and there is no reason to wait.
-- On every (re)connect it re-sends the subscriptions and then the page reloads its data over HTTP. Live messages that arrive while that reload is happening are held and applied after it, so an older HTTP response can't overwrite a newer live update.
-- The menu store keeps the **lower** of the current and incoming stock. Two near-simultaneous orders can send their stock messages in either order, and since stock never goes up from an order (no cancellations), the lower number is always the newer one. A full reload from the server still replaces everything. The only thing that raises stock is the demo reset, and that one forces every screen to do a full reload instead of sending a stock message.
+- Reconnect: retries every 2 s, or after 250 ms if the server closed the socket on purpose (code 1013).
+- After (re)connect: re-subscribes and reloads over HTTP; live messages wait until the reload is done.
+- Stock: the menu keeps the lower value, since orders only lower stock. A full reload (e.g. after a demo reset) replaces everything.
 
 ### How I checked it holds up when orders arrive at once
 
