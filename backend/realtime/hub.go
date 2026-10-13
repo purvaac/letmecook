@@ -101,6 +101,24 @@ func (h *Hub) RemoveClient(c *Client) {
 	h.removeLocked(c)
 }
 
+// DisconnectAll drops every subscribed client, the same way a slow client is
+// dropped: its WritePump closes the socket with "reconnect and re-fetch", so
+// every screen reconnects and reloads its state over HTTP.
+func (h *Hub) DisconnectAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	all := make(map[*Client]bool)
+	for _, clients := range h.rooms {
+		for c := range clients {
+			all[c] = true
+		}
+	}
+	for c := range all {
+		h.removeLocked(c)
+	}
+}
+
 // removeLocked must be called with h.mu held. Closing send only ever happens
 // here, under the lock, so no Broadcast can send on a closed channel.
 func (h *Hub) removeLocked(c *Client) {

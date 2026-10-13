@@ -13,7 +13,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/coder/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
@@ -57,7 +59,7 @@ func setup(t *testing.T, items ...testItem) (string, *pgxpool.Pool, []int) {
 		}
 	}
 
-	srv := httptest.NewServer(NewRouter(pool, realtime.NewHub(), []string{"http://localhost:3000"}))
+	srv := httptest.NewServer(NewRouter(pool, realtime.NewHub(), []string{"http://localhost:3000"}, false))
 	t.Cleanup(srv.Close)
 	return srv.URL, pool, ids
 }
@@ -267,5 +269,70 @@ func TestValidation(t *testing.T) {
 		if code := send(t, tc.method, url+tc.path, tc.body); code != 400 {
 			t.Errorf("%s: got %d, want 400", tc.name, code)
 		}
+	}
+}
+
+func TestDemoReset(t *testing.T) {
+	url, pool, _ := setup(t)
+	if code := send(t, http.MethodPost, url+"/api/demo/reset", ""); code != 404 {
+		t.Fatalf("reset with DEMO_RESET off: got %d, want 404", code)
+	}
+
+	ctx := context.Background()
+	items, err := db.SeedMenu(ctx, pool)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	wrap := items[1] // Paneer Tikka Wrap, stock 1
+	srv := httptest.NewServer(NewRouter(pool, realtime.NewHub(), []string{"http://localhost:3000"}, true))
+	t.Cleanup(srv.Close)
+
+	// A menu screen, subscribed before anything happens.
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.CloseNow()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"subscribe","room":"menu"}`)); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	if code := send(t, http.MethodPost, srv.URL+"/api/orders", orderBody(wrap.ID)); code != 201 {
+		t.Fatalf("place order: got %d", code)
+	}
+	// The stock:updated message proves the subscription is active.
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, _, err := conn.Read(readCtx); err != nil {
+		t.Fatalf("waiting for stock:updated: %v", err)
+	}
+	firstID := countRows(t, pool, `SELECT max(id) FROM orders`)
+
+	if code := send(t, http.MethodPost, srv.URL+"/api/demo/reset", ""); code != 200 {
+		t.Fatalf("reset: got %d, want 200", code)
+	}
+	if got := stockOf(t, pool, wrap.ID); got != 1 {
+		t.Errorf("stock after reset = %d, want 1", got)
+	}
+	if got := countRows(t, pool, `SELECT count(*) FROM orders`); got != 0 {
+		t.Errorf("orders after reset = %d, want 0", got)
+	}
+
+	// The screen is told to reconnect and re-fetch.
+	_, _, err = conn.Read(readCtx)
+	if status := websocket.CloseStatus(err); status != websocket.StatusTryAgainLater {
+		t.Errorf("socket after reset: got %v (status %d), want close status %d", err, status, websocket.StatusTryAgainLater)
+	}
+
+	if code := send(t, http.MethodPost, srv.URL+"/api/demo/reset", ""); code != 429 {
+		t.Errorf("second reset straight away: got %d, want 429", code)
+	}
+
+	if code := send(t, http.MethodPost, srv.URL+"/api/orders", orderBody(wrap.ID)); code != 201 {
+		t.Fatalf("order after reset: got %d", code)
+	}
+	if got := countRows(t, pool, `SELECT max(id) FROM orders`); got <= firstID {
+		t.Errorf("order id after reset = %d, want > %d (ids must not restart)", got, firstID)
 	}
 }

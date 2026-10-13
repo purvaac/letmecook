@@ -12,19 +12,21 @@ import (
 )
 
 // NewRouter registers all routes and wraps them in the CORS middleware.
-// origins are full URLs like http://localhost:3000.
-func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, origins []string) http.Handler {
-	s := &server{pool: pool, hub: hub, wsOrigins: originHosts(origins)}
+// origins are full URLs like http://localhost:3000. demoReset turns on
+// POST /api/demo/reset, which is meant for the public demo only.
+func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, origins []string, demoReset bool) http.Handler {
+	s := &server{pool: pool, hub: hub, wsOrigins: originHosts(origins), demoReset: demoReset}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "demoReset": s.demoReset})
 	})
 	mux.HandleFunc("GET /api/menu", s.getMenu)
 	mux.HandleFunc("GET /api/orders", s.listOrders)
 	mux.HandleFunc("POST /api/orders", s.placeOrder)
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 	mux.HandleFunc("PATCH /api/orders/{id}/status", s.updateStatus)
+	mux.HandleFunc("POST /api/demo/reset", s.resetDemo)
 	mux.HandleFunc("GET /ws", s.serveWS)
 
 	return withCORS(mux, origins)

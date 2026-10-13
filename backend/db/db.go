@@ -71,3 +71,31 @@ func SeedMenu(ctx context.Context, pool *pgxpool.Pool) ([]models.MenuItem, error
 	}
 	return items, nil
 }
+
+// RestockDemo puts every seeded item back to its seed stock and deletes all
+// orders, in one transaction. It is only used by the demo reset endpoint.
+// Rows are updated in seed (= id) order, the same order PlaceOrder locks them
+// in, so the two cannot deadlock. TRUNCATE runs without RESTART IDENTITY, so
+// order ids keep counting up and an id a customer tab still remembers can
+// never point at someone else's new order.
+func RestockDemo(ctx context.Context, pool *pgxpool.Pool) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin restock: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range seedItems {
+		if _, err := tx.Exec(ctx, `UPDATE menu_items SET stock = $1 WHERE name = $2`, item.Stock, item.Name); err != nil {
+			return fmt.Errorf("restock %q: %w", item.Name, err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `TRUNCATE order_items, orders`); err != nil {
+		return fmt.Errorf("clear orders: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit restock: %w", err)
+	}
+	return nil
+}

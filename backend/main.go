@@ -45,6 +45,7 @@ func run(seed bool) error {
 		return errors.New("DATABASE_URL is not set: copy .env.example to .env and add your Neon connection string")
 	}
 	origins := parseOrigins(os.Getenv("CORS_ORIGINS"))
+	demoReset := os.Getenv("DEMO_RESET") == "true"
 
 	connectCtx, cancelConnect := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelConnect()
@@ -60,7 +61,7 @@ func run(seed bool) error {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           handlers.NewRouter(pool, realtime.NewHub(), origins),
+		Handler:           handlers.NewRouter(pool, realtime.NewHub(), origins, demoReset),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -69,7 +70,7 @@ func run(seed bool) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("listening on :%s (allowed origins: %v)", port, origins)
+		log.Printf("listening on :%s (allowed origins: %v, demo reset: %v)", port, origins, demoReset)
 		errCh <- srv.ListenAndServe()
 	}()
 
