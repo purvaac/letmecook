@@ -181,10 +181,8 @@ I wrote Go tests that start the real server (`httptest`) against a real Postgres
 | Test | What it does | Result |
 |---|---|---|
 | `TestLastUnit` | 2 buyers, 1 unit in stock | 1 x 201, 1 x 409, stock ends at 0 |
-| `TestMassRace` | 50 buyers, 5 in stock | 5 x 201, 45 x 409, stock 0, exactly 5 orders in the table |
 | `TestOverlappingCarts` | 20 carts with the same 2 items, half [A,B] and half [B,A], 10 of each | 10 x 201, 10 x 409, no 500s (no deadlocks), stock matches, every order has both items |
 | `TestKitchenRace` | 5 kitchen screens press "Start cooking" on the same order | 1 x 200, 4 x 409, order ends at COOKING version 2 |
-| `TestValidation` | bad JSON, empty cart, quantity 11, skipping a stage | all 400 |
 | `TestDemoReset` | the reset endpoint (see below) | 404 when it is switched off; restores stock and clears orders; order ids keep counting up; a subscribed WebSocket gets closed with 1013; 429 straight after; 200 again after the 5 s cooldown |
 
 To make sure the tests can actually catch a bug, I temporarily removed the sorting in `PlaceOrder` and ran `TestOverlappingCarts` again. It failed with 13 x 500 caused by Postgres deadlocks. With the sorting back it passes. I did the same for the reset: with the line that disconnects the clients commented out, `TestDemoReset` fails.
@@ -193,7 +191,6 @@ I also checked everything by hand in the browser:
 
 - Two customer windows with the last Paneer Tikka Wrap in both carts, Place order clicked in both at the same time. One got "Order placed", the other got "Someone just ordered the last Paneer Tikka Wrap. Available now: 0.", and both menus switched to Sold out without a refresh.
 - Two kitchen boards clicking the same button at the same time. One moved the order, the other showed the notice, and both boards ended up the same.
-- I stopped and restarted the backend in the middle, and changed an order's status before the page had reconnected. The page caught up with the right status after reconnecting.
 
 And once more on the deployed version on Railway (real internet, real WebSocket through Railway's proxy): two simultaneous orders for the last Paneer Tikka Wrap gave one 201 and one 409 with stock 0, the menu socket got `stock: 0`, both kitchen sockets got the new order, two simultaneous "Mark ready" requests gave one 200 and one 409, and both kitchen sockets plus the customer's order socket got every update.
 
