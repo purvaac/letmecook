@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { getHealth, resetDemo } from "@/lib/api";
-import { useCartStore } from "@/lib/store";
+import { onMessage } from "@/lib/socket";
+import { useCartStore, useDemoStore } from "@/lib/store";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin"] });
@@ -43,6 +44,10 @@ function ResetDemoButton() {
   useEffect(() => {
     getHealth().then((res) => setEnabled(res.ok && res.data.demoReset === true));
   }, []);
+
+  // The header is never hidden, so this listener hears every reset, whichever
+  // page is showing (see useDemoStore).
+  useEffect(() => onMessage("demo:reset", () => useDemoStore.getState().bumpResets()), []);
 
   // Tick only while there is a countdown or a "done" message to clear.
   const ticking = waitUntil > now || doneUntil > now || failed;

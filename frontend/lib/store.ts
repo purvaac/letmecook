@@ -101,3 +101,16 @@ export const useKitchenStore = create<KitchenState>()((set) => ({
       return { orders: { ...state.orders, [order.id]: order } };
     }),
 }));
+
+// How many demo resets this tab has seen. The header bumps it on every
+// demo:reset message; it is always mounted, unlike pages, which Next hides
+// (not unmounts) on navigation and whose listeners are off while hidden.
+// Pages stamp each notice with this number and only show notices from the
+// current one, so a page hidden during a reset drops its stale notices as
+// soon as it is shown again.
+type DemoState = { resets: number; bumpResets: () => void };
+
+export const useDemoStore = create<DemoState>()((set) => ({
+  resets: 0,
+  bumpResets: () => set((s) => ({ resets: s.resets + 1 })),
+}));

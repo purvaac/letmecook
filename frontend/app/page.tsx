@@ -6,7 +6,7 @@ import MenuItemCard from "@/components/MenuItemCard";
 import StatusTracker from "@/components/StatusTracker";
 import { API_URL, getMenu, getOrder, placeOrder } from "@/lib/api";
 import { onMessage, onOpen, subscribe, unsubscribe } from "@/lib/socket";
-import { useCartStore, useMenuStore, type CappedLine } from "@/lib/store";
+import { useCartStore, useDemoStore, useMenuStore, type CappedLine } from "@/lib/store";
 import type { Order, OrderStatus, StockChange } from "@/lib/types";
 
 // sessionStorage, not localStorage: each window only lists the orders placed
@@ -22,7 +22,8 @@ const statusBadge: Record<OrderStatus, { label: string; className: string }> = {
   PICKED_UP: { label: "Picked up", className: "bg-line text-muted" },
 };
 
-type Notice = { id: number; tone: "info" | "success" | "error"; text: string };
+// epoch is the demo reset count when the notice was made (see useDemoStore).
+type Notice = { id: number; tone: "info" | "success" | "error"; text: string; epoch: number };
 
 const noticeStyles: Record<Notice["tone"], string> = {
   info: "border-warn/40 bg-warn/10",
@@ -61,6 +62,8 @@ export default function CustomerPage() {
   // winner would be told their item was removed.
   const submittingRef = useRef(false);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const resets = useDemoStore((s) => s.resets);
+  const [dismissedReset, setDismissedReset] = useState(0);
   const [myOrders, setMyOrders] = useState<Record<number, Order>>({});
   const [ordersLoaded, setOrdersLoaded] = useState(false);
   const followed = useRef(new Set<number>());
@@ -91,7 +94,8 @@ export default function CustomerPage() {
   }
 
   function notify(tone: Notice["tone"], text: string) {
-    setNotices((list) => [{ id: nextNoticeId++, tone, text }, ...list].slice(0, 5));
+    const epoch = useDemoStore.getState().resets;
+    setNotices((list) => [{ id: nextNoticeId++, tone, text, epoch }, ...list].slice(0, 5));
   }
 
   // Tells the customer about cart lines that were lowered because stock dropped.
@@ -143,11 +147,11 @@ export default function CustomerPage() {
     subscribe("menu");
     const offOpen = onOpen(load);
     const offOpenOrders = onOpen(loadOrders);
-    // Someone pressed Reset demo: every order is gone and old notices (placed,
-    // sold out) no longer apply. Clear them here instead of relying on each
-    // saved order 404ing after the reconnect that follows.
+    // Someone pressed Reset demo: every order is gone. Clear Your orders here
+    // instead of relying on each saved order 404ing after the reconnect.
+    // Old notices are hidden through the reset count, not here, because this
+    // listener is off while the page is hidden on another route.
     const offReset = onMessage("demo:reset", () => {
-      setNotices([{ id: nextNoticeId++, tone: "info", text: RESET_NOTICE }]);
       followed.current.forEach((id) => unsubscribe("order", id));
       followed.current.clear();
       writeOrderIds([]);
@@ -225,6 +229,11 @@ export default function CustomerPage() {
   }
 
   const menu = Object.values(items).sort((a, b) => a.id - b.id);
+  // Only notices from after the last reset, plus one note about the reset.
+  const shownNotices: Notice[] = notices.filter((n) => n.epoch === resets);
+  if (resets > 0 && dismissedReset !== resets) {
+    shownNotices.unshift({ id: -resets, tone: "info", text: RESET_NOTICE, epoch: resets });
+  }
   const orderList = Object.values(myOrders).sort((a, b) => b.id - a.id);
 
   return (
@@ -255,9 +264,9 @@ export default function CustomerPage() {
       </section>
 
       <aside className="flex flex-col gap-6">
-        {notices.length > 0 && (
+        {shownNotices.length > 0 && (
           <ul className="flex flex-col gap-2" aria-live="polite">
-            {notices.map((n) => (
+            {shownNotices.map((n) => (
               <li
                 key={n.id}
                 className={`flex items-start justify-between gap-2 rounded-lg border p-3 text-sm ${noticeStyles[n.tone]}`}
@@ -268,7 +277,9 @@ export default function CustomerPage() {
                 <button
                   type="button"
                   aria-label="Dismiss"
-                  onClick={() => setNotices((list) => list.filter((x) => x.id !== n.id))}
+                  onClick={() =>
+                    n.id < 0 ? setDismissedReset(resets) : setNotices((list) => list.filter((x) => x.id !== n.id))
+                  }
                   className="-my-2 -mr-1 flex size-10 shrink-0 items-center justify-center rounded-md text-muted hover:text-ink"
                 >
                   x
